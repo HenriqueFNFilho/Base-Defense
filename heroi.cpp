@@ -1,7 +1,7 @@
 #include "heroi.hpp"
 
 Heroi::Heroi() {
-    forma.setRadius(20.0f);
+    forma.setRadius(10.0f);
     forma.setFillColor(sf::Color::Blue);
     forma.setPosition(400.0f, 300.0f); // Inicia no centro
     vida = 100;

@@ -1,7 +1,7 @@
 #include "inimigo.hpp"
 
 Inimigo::Inimigo(const sf::Vector2f& posicaoInicial) {
-    forma.setRadius(15.0f);
+    forma.setRadius(10.0f);
     forma.setFillColor(sf::Color::Green); // Inimigos verdes
     forma.setPosition(posicaoInicial);
 }
@@ -13,4 +13,8 @@ void Inimigo::mover(const sf::Vector2f& alvo, float deltaTime) {
         direcao /= distancia;
         forma.move(direcao * 100.0f * deltaTime);
     }
+}
+
+sf::Vector2f Inimigo::getPosicao() const {
+    return forma.getPosition();
 }
