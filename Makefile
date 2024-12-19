@@ -4,7 +4,7 @@ CPP = g++ -Wall -pedantic
 SF = -lsfml-graphics -lsfml-window -lsfml-system 
 
 
-Arquivos = main.cpp heroi.cpp base.cpp projeteis.cpp inimigo.cpp 
+Arquivos = main.cpp gerenciadorjogo.cpp heroi.cpp base.cpp projeteis.cpp inimigo.cpp 
 
 
 all:
