@@ -1,9 +1,14 @@
+
 #include "inimigo.hpp"
 
 Inimigo::Inimigo(const sf::Vector2f& posicaoInicial) {
     forma.setRadius(10.0f);
-    forma.setFillColor(sf::Color::Green); // Inimigos verdes
+    forma.setFillColor(sf::Color::Green); // cor dos inimigos (verde)
     forma.setPosition(posicaoInicial);
+}
+
+bool Inimigo::deveDisparar() const {
+    return relogioDisparo.getElapsedTime().asSeconds() > 1.0f;
 }
 
 void Inimigo::mover(const sf::Vector2f& alvo, float deltaTime) {

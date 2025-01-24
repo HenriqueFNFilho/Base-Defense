@@ -1,3 +1,4 @@
+
 #include "base.hpp"
 
 Base::Base(const sf::Vector2f& posicao, const sf::Vector2f& tamanho) {

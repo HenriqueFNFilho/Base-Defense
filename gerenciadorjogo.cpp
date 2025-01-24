@@ -1,7 +1,7 @@
 #include "gerenciadorjogo.hpp"
 
-GerenciadorJogo::GerenciadorJogo() 
-    : janela(sf::VideoMode(800, 600), "Base Defence", sf::Style::Titlebar | sf::Style::Close), 
+GerenciadorJogo::GerenciadorJogo()
+    : janela(sf::VideoMode(800, 600), "Base Defence", sf::Style::Titlebar | sf::Style::Close),
       base(sf::Vector2f(400.0f, 300.0f), sf::Vector2f(200.0f, 150.0f)) {
     janela.setFramerateLimit(60);
 
@@ -16,8 +16,38 @@ GerenciadorJogo::GerenciadorJogo()
 
 void GerenciadorJogo::executar() {
     while (janela.isOpen()) {
-        processarEventos();
-        atualizar(relogioGeral.restart().asSeconds());
+        if (jogoAtivo) {
+            processarEventos();
+            atualizar(relogioGeral.restart().asSeconds());
+        }
+        else {
+            // Limpa recursos após o game over
+            inimigos.clear();
+            tirosHeroi = {};
+            tirosInimigos = {};
+            quadradosMunicao.clear();
+
+            // Reinicia variáveis para um novo jogo
+            heroi.vida = 100;
+            heroi.municao = 100;
+            base.vida = 100;
+            inimigosMortos = 0;
+
+            // Mostra tela de game over
+            mostrarGameOver();
+
+            // Espera por uma ação do usuário
+            while (janela.isOpen()) {
+                sf::Event event;
+                while (janela.pollEvent(event)) {
+                    if (event.type == sf::Event::Closed ||
+                        (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape)) {
+                        janela.close();
+                    }
+                }
+            }
+            break; // Sai do loop principal
+        }
         renderizar();
     }
 }
@@ -29,13 +59,7 @@ void GerenciadorJogo::processarEventos() {
             janela.close();
         }
 
-        // Controle do herói
-        if (evento.type == sf::Event::MouseButtonPressed && evento.mouseButton.button == sf::Mouse::Right) {
-            sf::Vector2f destino(static_cast<float>(evento.mouseButton.x), static_cast<float>(evento.mouseButton.y));
-            heroi.definirDestino(destino);
-        }
-
-        if (evento.type == sf::Event::KeyPressed && evento.key.code == sf::Keyboard::Q) {
+        if (jogoAtivo && evento.type == sf::Event::KeyPressed && evento.key.code == sf::Keyboard::Q) {
             if (heroi.municao > 0) {
                 sf::Vector2f direcao = sf::Vector2f(sf::Mouse::getPosition(janela)) - heroi.getPosicao();
                 float magnitude = std::sqrt(direcao.x * direcao.x + direcao.y * direcao.y);
@@ -45,6 +69,9 @@ void GerenciadorJogo::processarEventos() {
                     heroi.municao--;
                 }
             }
+        }
+         if (jogoAtivo && evento.type == sf::Event::MouseButtonPressed && evento.mouseButton.button == sf::Mouse::Right) {
+        heroi.definirDestino(sf::Vector2f(evento.mouseButton.x, evento.mouseButton.y));
         }
     }
 }
@@ -60,11 +87,11 @@ void GerenciadorJogo::atualizar(float deltaTime) {
         cronometroSpawn.restart();
     }
 
-    // Movimentação dos inimigos
+    // Movimentação e tiros dos inimigos
     for (auto& inimigo : inimigos) {
         inimigo.mover(base.getPosicao(), deltaTime);
 
-        // Inimigos disparam projéteis
+        // Controle de tiros dos inimigos
         if (rand() % 100 < 2) {
             sf::Vector2f direcao = heroi.getPosicao() - inimigo.getPosicao();
             float magnitude = std::sqrt(direcao.x * direcao.x + direcao.y * direcao.y);
@@ -75,31 +102,58 @@ void GerenciadorJogo::atualizar(float deltaTime) {
         }
     }
 
-    // Atualização dos projéteis
-    if (!tirosHeroi.empty()) {
-        Projeteis& tiro = tirosHeroi.front();
-        tiro.atualizar(deltaTime);
-        if (tiro.forma.getPosition().x < 0 || tiro.forma.getPosition().x > 800 ||
-            tiro.forma.getPosition().y < 0 || tiro.forma.getPosition().y > 600) {
-            tirosHeroi.pop();
+    if (jogoAtivo && heroi.vida > 0 && base.vida > 0) {
+        if (relogioGeral.getElapsedTime().asSeconds() > 10.0f) {
+            jogoAtivo = false;
+            vitoria = true; 
         }
     }
 
-    if (!tirosInimigos.empty()) {
-        Projeteis& tiro = tirosInimigos.front();
-        tiro.atualizar(deltaTime);
-        if (tiro.forma.getPosition().x < 0 || tiro.forma.getPosition().x > 800 ||
-            tiro.forma.getPosition().y < 0 || tiro.forma.getPosition().y > 600) {
-            tirosInimigos.pop();
-        }
-    }
+    atualizarProjeteis(tirosHeroi, deltaTime, alcanceMaximoTiros);
+    atualizarProjeteis(tirosInimigos, deltaTime, alcanceMaximoTiros);
 
     verificarColisoes();
+
+    // Verifica se o jogo acabou
+    if (heroi.vida <= 0 || base.vida <= 0) {
+        jogoAtivo = false;
+    }
+}
+
+void GerenciadorJogo::atualizarProjeteis(std::queue<Projeteis>& projeteis, float deltaTime, float alcanceMax) {
+    if (!projeteis.empty()) {
+        Projeteis& tiro = projeteis.front();
+        tiro.atualizar(deltaTime);
+
+        if (tiro.getDistanciaPercorrida() > alcanceMax ||
+            tiro.getForma().getPosition().x < 0 || tiro.getForma().getPosition().x > 800 ||
+            tiro.getForma().getPosition().y < 0 || tiro.getForma().getPosition().y > 600) {
+            projeteis.pop();
+        }
+    }
 }
 
 void GerenciadorJogo::verificarColisoes() {
     for (auto itInimigo = inimigos.begin(); itInimigo != inimigos.end();) {
-        if (!tirosHeroi.empty() && tirosHeroi.front().forma.getGlobalBounds().intersects(itInimigo->forma.getGlobalBounds())) {
+        if (!tirosHeroi.empty() && tirosHeroi.front().getForma().getGlobalBounds().intersects(itInimigo->forma.getGlobalBounds())) {
+            sf::RectangleShape quadrado(sf::Vector2f(20.0f, 20.0f));
+            int corAleatoria = rand() % 3; // Gera um número aleatório entre 0 e 2
+            int valorAleatorio = rand() % 10 + 1; // Gera um número aleatório entre 1 e 10
+            
+            switch (corAleatoria) {
+                case 0: // Lilás (incrementa munição)
+                    quadrado.setFillColor(sf::Color(200, 0, 200));
+                    break;
+                case 1: // Amarelo (incrementa vida da base)
+                    quadrado.setFillColor(sf::Color(255, 255, 0));
+                    break;
+                case 2: // Laranja (incrementa vida do herói)
+                    quadrado.setFillColor(sf::Color(255, 165, 0));
+                    break;
+            }
+            
+            quadrado.setPosition(itInimigo->getPosicao());
+            quadradosMunicao.push_back({quadrado, corAleatoria + 1, valorAleatorio}); // Armazena a cor e o valor como valores
             itInimigo = inimigos.erase(itInimigo);
             tirosHeroi.pop();
             inimigosMortos++;
@@ -107,7 +161,68 @@ void GerenciadorJogo::verificarColisoes() {
             ++itInimigo;
         }
     }
+    
+    for (auto itQuadrado = quadradosMunicao.begin(); itQuadrado != quadradosMunicao.end();) {
+        if (heroi.forma.getGlobalBounds().intersects(itQuadrado->forma.getGlobalBounds())) {
+            switch (itQuadrado->valor - 1) { // Verifica a cor armazenada e aplica o efeito correspondente
+                case 0: // Lilás
+                    heroi.municao += itQuadrado->incremento;
+                    break;
+                case 1: // Amarelo
+                    base.vida += itQuadrado->incremento;
+                    break;
+                case 2: // Laranja
+                    heroi.vida += itQuadrado->incremento;
+                    break;
+            }
+            
+            itQuadrado = quadradosMunicao.erase(itQuadrado);
+        } else {
+            ++itQuadrado;
+        }
+    }
+
+    while (!tirosInimigos.empty()) {
+        Projeteis& tiro = tirosInimigos.front();
+        if (tiro.getForma().getGlobalBounds().intersects(heroi.forma.getGlobalBounds())) {
+            heroi.vida--;
+            tirosInimigos.pop();
+        } else if (tiro.getForma().getGlobalBounds().intersects(base.forma.getGlobalBounds())) {
+            base.vida--;
+            tirosInimigos.pop();
+        } else {
+            break;
+        }
+    }
 }
+
+
+
+void GerenciadorJogo::mostrarGameOver() {
+    sf::Text gameOverTexto;
+    gameOverTexto.setFont(fonte);
+    gameOverTexto.setCharacterSize(50);
+    gameOverTexto.setFillColor(sf::Color::Black);
+
+    // Concatena o número de inimigos abatidos à mensagem
+    std::string mensagemGameOver = "GAME OVER\n(Inimigos abatidos: " + std::to_string(inimigosMortos) + ")";
+    gameOverTexto.setString(mensagemGameOver);
+
+    gameOverTexto.setPosition(400.0f - gameOverTexto.getGlobalBounds().width / 2, 300.0f);
+    janela.draw(gameOverTexto);
+}
+
+void GerenciadorJogo::mostrarVitoria() {
+    sf::Text vitoriaTexto;
+    vitoriaTexto.setFont(fonte);
+    vitoriaTexto.setCharacterSize(50);
+    vitoriaTexto.setFillColor(sf::Color::Black);
+    vitoriaTexto.setString("YOU WIN");
+    vitoriaTexto.setPosition(400.0f - vitoriaTexto.getGlobalBounds().width / 2, 300.0f);
+    janela.draw(vitoriaTexto);
+}
+
+
 
 void GerenciadorJogo::renderizar() {
     janela.clear(sf::Color::White);
@@ -118,15 +233,18 @@ void GerenciadorJogo::renderizar() {
         janela.draw(inimigo.forma);
     }
 
+    for (const auto& quadrado : quadradosMunicao) {
+        janela.draw(quadrado.forma);
+    }
+
     if (!tirosHeroi.empty()) {
-        janela.draw(tirosHeroi.front().forma);
+        janela.draw(tirosHeroi.front().getForma());
     }
 
     if (!tirosInimigos.empty()) {
-        janela.draw(tirosInimigos.front().forma);
+        janela.draw(tirosInimigos.front().getForma());
     }
 
-    // Atualiza HUD
     textoHUD.setString(
         "Vida Base: " + std::to_string(base.vida) +
         " | Municao: " + std::to_string(heroi.municao) +
@@ -135,5 +253,21 @@ void GerenciadorJogo::renderizar() {
     textoHUD.setPosition(60, 10);
     janela.draw(textoHUD);
 
+    for (const auto& quadrado : quadradosMunicao) {
+        janela.draw(quadrado.forma);
+        sf::Text texto;
+        texto.setFont(fonte);
+        texto.setCharacterSize(12);
+        texto.setFillColor(sf::Color::Black);
+        texto.setString(std::to_string(quadrado.incremento));
+        texto.setPosition(quadrado.forma.getPosition().x + 5, quadrado.forma.getPosition().y + 5);
+        janela.draw(texto);
+    }
+
+    if (!jogoAtivo) {
+        mostrarGameOver();
+    }
+
     janela.display();
 }
+
